@@ -1,0 +1,13 @@
+
+vedio:
+	smplayer
+
+voice:
+	alsamixer
+
+music:
+	audacious
+
+sudo mount /dev/sdb1 /media -t vfat -o iocharset=utf8
+
+

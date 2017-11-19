@@ -1,0 +1,180 @@
+
+Interrupt for Tiny4412
+
+
+
+
+
+
+#include <linux/interrupt.h>
+#include <mach/irqs.h>	// 片内外设
+#include <linux/gpio.h>	// 片外外设
+#include <macg/gpio.h>
+
+1. 确定中断号
+#define KEY_IRQ gpio_to_irq(gpio_num);
+
+2. 中断处理函数
+irqreturn_t irq_function(int irq, void *dev_id);
+int irq		中断号
+void *dev_id	传递给中断处理函数的参数
+irqreturn_t
+	IRQ_NONE
+	IRQ_HANDLED
+
+3. 注册中断处理函数
+ret = request_irq(KEY_IRQ,	// 中断号
+					irq_function,	// 中断处理函数
+					flags,	// 中断的标志
+					"xxx",	// 中断处理函数的名字
+					dev_id	// dev_id为传递给中断处理函数的参数，一般会设置为私有结构体的指针，非共享中断可以为NULL
+);
+
+返回值（必须检查返回值）
+	0	成功
+
+4. 注销中断处理函数
+void free_irq(int irq, void *dev_id);
+dev_id	要和request_irq()的参数一致
+如果irq有多个相同的dev_id，将释放第一个，所以，共享中断的dev_id在释放的时候可能会释放到其他设备的中断
+
+5. 屏蔽中断
+	1. 人为关闭/打开某个中断(mask)
+		disable_irq(int irq);
+		enable_irq(int irq);
+
+	2. 屏蔽本CPU的中断
+		local_irq_disable();
+		local_irq_enable();
+
+
+
+如果当前有个中断处理程序正在执行：
+如果IRQF_DISABLED没有被设置，与该中断同级的其他中断会被屏蔽。
+如果IRQF_DISABLED被设置，当前处理器上所有其他中断都会被屏蔽。
+
+
+
+
+
+
+
+
+
+
+
+
+
+在上半部和下半部之间划分工作：
+如果任务对时间非常敏感，将其放在中断处理程序中执行。
+如果任务和硬件相关，将其放在中断处理程序中执行。
+如果任务要保证不被其他中断打断，将其放在中断处理程序中执行。
+其他所有任务，考虑放在下半部执行。
+
+
+下半部执行的关键在于当它们运行的时候，允许响应所有的中断。
+
+
+
+tasklet	中断底半部
+
+tasklet不能睡眠。
+
+在中断上半部执行期间，中断是关闭的，而在中断下半部执行时，是允许中断请求的，即就而已被打断。
+#include <linux/interrupt.h>
+struct tasklet_struct;
+
+
+在任何情况下，有休眠、睡眠的函数一定不要放在中断上下文的代码中执行，除了delay.h中的接口。
+进程上下文是可以休眠、睡眠或者延时的。
+
+
+
+struct tasklet_struct task;
+
+tasklet_init(&task, task_function, data);
+
+tasklet_schedule(&task);
+
+
+
+工作队列	workqueue
+
+
+#include <linux/workqueue.h>
+
+工作队列位于进程上下文，允许重新调度甚至可以睡眠。
+
+
+
+工作队列和tasklet的选择：
+	如果推后执行的任务需要睡眠，那么就选择工作队列; 如果推后执行的任务不需要睡眠，那么就选择tasklet。
+	如果需要一个可以重新调度的实体来执行下半部处理，也应该使用工作队列。
+
+
+API:
+
+struct work_struct work;
+
+INIT_WORK(struct work_struct *work, void(*func)(struct work_struct *work));
+
+定义并初始化
+DECLARE_WORK(name, void(*func)(struct work_struct *work));
+
+调度
+int schedule_work(struct work_struct *work);
+return:
+	1	成功
+	0	已经添加在队列上
+
+延迟调度
+int schedule_delayed_work(struct work_struct *work, unsigned long delay);
+
+
+create_workqueue();
+
+queue_work();
+
+queue_delayed_work();
+
+
+销毁队列
+void destroy_workqueue(struct workqueue_strict *wq);
+
+
+
+
+下半部机制的选择：
+
+有三种机制可供选择：
+	软中断
+	tasklet
+	工作队列
+
+
+tasklet是有效的软中断，但不能并发运行。驱动程序应尽可能选择tasklet。
+
+
+
+
+tasklet和工作队列的选择：
+
+tasklet基于软中断实现，工作队列靠内核线程实现。
+
+如果需要把任务推后到进程上下文中完成，只能选择工作队列。
+如果需要睡眠，只能选择工作队列。
+否则最好用tasklet。
+
+
+
+
+下半部		|	上下文	|	顺序执行保障
+软中断		|	中断	|	没有
+tasklet		|	中断	|	同类型不能同时执行
+工作队列	|	进程	|	没有
+
+
+
+
+
+

@@ -1,0 +1,148 @@
+
+Tiny4412
+
+
+Generic Interrupt Controller(GIC)
+
+1. SPI	ID(159:32)
+
+2. PPI	ID(31:16)
+
+3. SGI	ID(15:0)	// CPU给别的CPU发送中断
+
+
+四核CPU
+中断到来后送到哪个CPU, 由GIC决定
+
+0 ~ 1019号，共1020个中断
+
+寄存器
+
+ICC	针对全局整体的配置
+	优先级、中断开关
+ICD	针对某一个中断的配置
+
+
+
+1. 异常向量表
+ICCICR	// 启用中断信号，启用ARM Core，相当于GIC总开关
+	0	Disable
+	1	Enable
+	中断给CPU发送中断
+	控制GIC要不要给CPU发送中断
+
+
+CPU开中断
+	"cpsie i\n"
+	控制ARM Core要不要接收GIC的中断
+
+ICCPMR	// 中断优先级
+ICCPMR_CPU0 =0xFF	// 最低
+			0		// 最高
+	优先级高于该值的中断才能被发送
+
+ICDDCR	// 外设中断启不启用，要不要转发中断给CPU
+	1	要转发
+	0	
+
+ICDIPR	// 
+	每个中断占8位
+
+ICDIPTR	// 中断要发给哪个CPU
+	每个中断占8位
+
+1111 1111	// 最多支持8核
+0010 0001
+
+ICDISER	// 具体启用不启用这个中断
+	[3:0]	// 中断号
+	[23:16]	// 要发给哪个CPU
+
+	
+
+
+
+
+Extern Interrupt
+
+
+polling	轮询
+
+
+GPX3_3	KEY2
+
+GPX3CON[3]
+	0xF		EXINT43[3]
+
+先找到中断号
+共享中断
+
+GPX3_2	XEINT26
+IRQ_ID:	64	EINT[16_31]
+
+先把64号中断打开
+IPR
+
+
+
+64 / 4 = 16号
+64 % 4 = 0位
+ICDIPR16_CPU0 = ~(0xFF << 0);	// 16号寄存器中的0~7共8位  优先级
+// The Zero is Highest priority
+
+
+ICDIPTR16_CPU0 = (1 << 0);	// 中断发送给哪个CPU, For CPU0
+每个寄存器占8位，CPU0的第16个寄存器
+
+ICDISER2_CPU0 = (1 << 0);	// Enable interrutp 0
+启用位
+64 / 32 = 2
+64 % 32 = 0
+第2个寄存器中的第0位
+
+
+外部中断控制器
+GPX3CON[3]
+	0xF	EXT_INT43[3]
+
+EXT_INT43CON[3]
+	Trigger mode
+	外部中断触发类型
+	0x2	Triggers Falling
+
+
+GPX3CON &= ~(0x7 << 8);
+GPX3CON |= (0x0F << 8);	// Configure as Exint43_2	----	EINT26
+EXT_INT43CON &= ~(0x7 << 8);
+EXT_INT43CON &= ~(0x3 << 8);	// Rising edge trigger
+
+EXT_INT43_MASK &= ~(0x1 << 2);	// Enable ExtINT43_2	----	EINT26 for Key1
+
+
+void do_irq()
+{
+	if (EXT_INT43_PEND & (1 << 2)) {
+		EXT_INT43_PEND = (1 << 2);
+	}
+
+
+}
+
+
+ARM
+
+GIC
+
+INT
+
+EXT INT
+
+do_irq	// Clear Int
+
+
+
+
+
+
+
+
